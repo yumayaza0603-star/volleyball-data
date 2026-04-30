@@ -97,8 +97,6 @@ input {
 </head>
 <body>
 
-<h1>カウンター（タブ＋合算＋スクショ＋編集）</h1>
-
 <div class="tabbar" id="tabbar"></div>
 <button class="btn-main" onclick="addSet()">＋セット追加</button>
 <button class="btn-gray" onclick="toggleScreenshot()">スクショモード切替</button>
@@ -169,7 +167,6 @@ function renderTabs(){
     b.textContent = set.name || ("セット" + (i+1));
     if(i === current) b.classList.add("active");
 
-    // セット名編集（ダブルクリック）
     b.ondblclick = ()=>{
       const newName = prompt("セット名を入力", b.textContent);
       if(newName){
