@@ -1,242 +1,250 @@
 <!DOCTYPE html>
 <html lang="ja">
-<heahead>
+<head>
 <meta charset="UTF-8">
-<title>記録</title>
+<title>カウンター</title>
 <style>
-body { font-family: sans-serif; padding:10px; }
-button { margin:2px; }
-input { margin:4px; }
-.active { background:#ddd; }
-.hide button:not(.toggle){ display:none; }
-.hide { font-size:18px; }
-.tab span { margin-right:6px; }
+  body { font-family: sans-serif; padding: 20px; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 6px;
+    text-align: center;
+    font-size: 14px;
+  }
+
+  button { margin: 2px; }
+
+  input {
+    padding: 10px;
+    font-size: 16px;
+    width: 200px;
+  }
 </style>
 </head>
 <body>
 
-<button class="toggle" onclick="toggleView()">表示切替</button>
+<h1>カウンター</h1>
 
-<h3>人追加</h3>
-<input id="person">
+<button onclick="undo()">1つ戻る</button>
+<button onclick="resetAll()">リセット</button>
+<button onclick="fullReset()">完全リセット</button>
+
+<h3>個人追加</h3>
+<input id="newPerson" placeholder="名前">
 <button onclick="addPerson()">追加</button>
-
-<hr>
-
-<button onclick="addSet()">＋セット</button>
-<label><input type="checkbox" id="inherit">人引き継ぎ</label>
-
-<div id="tabs" class="tab"></div>
-
-<h3>タイトル</h3>
-<input id="titleInput" oninput="changeTitle()">
 
 <div id="app"></div>
 
-<hr>
-
-<button onclick="merge()">選択合算</button>
-
-<div id="result"></div>
-
 <script>
 
-const cfg={
-r:["a","b","c","dm"],
-s:["◎","○","△","✕"],
-a:["◎","○","△","✕","B"]
+const config = {
+  "レセプション": ["a","b","c","dm"],
+  "サーブ": ["◎","○","△","✕"],
+  "アタック": ["◎","○","△","✕","B"]
 };
 
-let db=JSON.parse(localStorage.getItem("db"))||[];
-let current=0;
+const sets = Object.keys(config);
 
-// ===== 保存 =====
-function save(){
-localStorage.setItem("db",JSON.stringify(db));
+let data = JSON.parse(localStorage.getItem("data")) || {};
+let history = [];
+
+sets.forEach(s => { if (!data[s]) data[s] = {}; });
+
+function save(){ localStorage.setItem("data", JSON.stringify(data)); }
+
+function saveHistory(){
+  history.push(JSON.stringify(data));
+  if(history.length>200) history.shift();
 }
 
-// ===== 表示切替 =====
-function toggleView(){
-document.body.classList.toggle("hide");
-}
+// 計算補助
+function safeDiv(a,b){ return b===0 ? 0 : a/b; }
+function pct(v){ return (v*100).toFixed(1)+"%"; }
 
-// ===== セット追加 =====
-function addSet(){
-let set={title:"セット"+(db.length+1),r:{},s:{},a:{}};
-
-if(inherit.checked && db.length){
-let last=db[db.length-1];
-Object.keys(last.r).forEach(p=>{
-set.r[p]={a:0,b:0,c:0,dm:0};
-set.s[p]={"◎":0,"○":0,"△":0,"✕":0};
-set.a[p]={"◎":0,"○":0,"△":0,"✕":0,"B":0};
-});
-}
-
-db.push(set);
-current=db.length-1;
-render();
-save();
-}
-
-// ===== 人追加 =====
-function addPerson(){
-const name=person.value;
-if(!name)return;
-
-db.forEach(set=>{
-if(!set.r[name]){
-set.r[name]={a:0,b:0,c:0,dm:0};
-set.s[name]={"◎":0,"○":0,"△":0,"✕":0};
-set.a[name]={"◎":0,"○":0,"△":0,"✕":0,"B":0};
-}
-});
-
-person.value="";
-render();
-save();
-}
-
-// ===== タブ =====
-function renderTabs(){
-tabs.innerHTML="";
-db.forEach((s,i)=>{
-let wrap=document.createElement("span");
-
-// チェック
-let chk=document.createElement("input");
-chk.type="checkbox";
-chk.className="sel";
-chk.dataset.i=i;
-
-// ボタン
-let b=document.createElement("button");
-b.textContent=s.title||("セット"+(i+1));
-if(i===current)b.className="active";
-b.onclick=()=>{current=i;render();};
-
-wrap.appendChild(chk);
-wrap.appendChild(b);
-tabs.appendChild(wrap);
-});
-}
-
-// ===== タイトル変更 =====
-function changeTitle(){
-if(!db[current])return;
-db[current].title=titleInput.value;
-renderTabs();
-save();
-}
-
-// ===== 表 =====
 function render(){
-renderTabs();
+  const app = document.getElementById("app");
+  app.innerHTML = "";
 
-if(!db.length){
-app.innerHTML="データなし";
-return;
+  sets.forEach(s=>{
+    const items = config[s];
+    let html = `<h2>${s}</h2><table>`;
+
+    // ヘッダ
+    html += `<tr><th>名前</th>`;
+    items.forEach(i=> html+=`<th>${i}</th>`);
+    html += `<th>合計</th>`;
+
+    // 計算列
+    if(s==="レセプション"){
+      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
+    }
+    if(s==="サーブ"){
+      html += `<th>効果率</th><th>ミス率</th>`;
+    }
+    if(s==="アタック"){
+      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
+    }
+
+    html += `</tr>`;
+
+    // 全体合計用
+    let teamTotal = 0;
+
+    Object.keys(data[s]).forEach(p=>{
+      let total = 0;
+      items.forEach(i=>{
+        if(!data[s][p][i]) data[s][p][i]=0;
+        total += data[s][p][i];
+      });
+      teamTotal += total;
+    });
+
+    // 各人
+    Object.keys(data[s]).forEach(p=>{
+      let total = 0;
+      let row = `<tr><td>${p}<br><button onclick="removePerson('${p}')">削除</button></td>`;
+
+      items.forEach(i=>{
+        total += data[s][p][i];
+        row += `<td>${data[s][p][i]}<br><button onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
+      });
+
+      row += `<td>${total}</td>`;
+
+      // レセプション
+      if(s==="レセプション"){
+        const a=data[s][p]["a"]||0;
+        const b=data[s][p]["b"]||0;
+        const dm=data[s][p]["dm"]||0;
+
+        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
+        row += `<td>${pct(safeDiv(a,total))}</td>`;
+        row += `<td>${pct(safeDiv(dm,total))}</td>`;
+      }
+
+      // サーブ
+      if(s==="サーブ"){
+        const good=(data[s][p]["◎"]||0)+(data[s][p]["○"]||0);
+        const miss=data[s][p]["✕"]||0;
+
+        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
+        row += `<td>${pct(safeDiv(miss,total))}</td>`;
+      }
+
+      // アタック
+      if(s==="アタック"){
+        const good=data[s][p]["◎"]||0;
+        const miss=data[s][p]["✕"]||0;
+
+        const 決定率=safeDiv(good,total);
+        const ミス率=safeDiv(miss,total);
+        const 効果率=決定率-ミス率;
+        const 配給率=safeDiv(total,teamTotal);
+
+        row += `<td>${pct(配給率)}</td>`;
+        row += `<td>${pct(決定率)}</td>`;
+        row += `<td>${pct(効果率)}</td>`;
+        row += `<td>${pct(ミス率)}</td>`;
+      }
+
+      row += `</tr>`;
+      html += row;
+    });
+
+    // チーム合計行
+    let totalRow = `<tr><th>合計</th>`;
+    let sums={};
+    items.forEach(i=> sums[i]=0);
+
+    Object.keys(data[s]).forEach(p=>{
+      items.forEach(i=> sums[i]+=data[s][p][i]||0);
+    });
+
+    let total=0;
+    items.forEach(i=>{
+      total+=sums[i];
+      totalRow+=`<th>${sums[i]}</th>`;
+    });
+
+    totalRow+=`<th>${total}</th>`;
+
+    // チーム計算
+    if(s==="レセプション"){
+      totalRow+=`<th>${pct(safeDiv(sums["a"]+sums["b"],total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(sums["a"],total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(sums["dm"],total))}</th>`;
+    }
+
+    if(s==="サーブ"){
+      const good=sums["◎"]+sums["○"];
+      const miss=sums["✕"];
+      totalRow+=`<th>${pct(safeDiv(good-miss,total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(miss,total))}</th>`;
+    }
+
+    if(s==="アタック"){
+      const good=sums["◎"];
+      const miss=sums["✕"];
+      const 決定率=safeDiv(good,total);
+      const ミス率=safeDiv(miss,total);
+      const 効果率=決定率-ミス率;
+
+      totalRow+=`<th>-</th>`; // 配給率は全体では意味なし
+      totalRow+=`<th>${pct(決定率)}</th>`;
+      totalRow+=`<th>${pct(効果率)}</th>`;
+      totalRow+=`<th>${pct(ミス率)}</th>`;
+    }
+
+    totalRow+=`</tr>`;
+    html+=totalRow;
+
+    html+=`</table>`;
+    app.innerHTML+=html;
+  });
 }
 
-titleInput.value=db[current].title||"";
-
-let set=db[current];
-let html="";
-html+=table(set.r,cfg.r,"r");
-html+=table(set.s,cfg.s,"s");
-html+=table(set.a,cfg.a,"a");
-
-app.innerHTML=html;
+// 基本機能
+function inc(s,p,i){ saveHistory(); data[s][p][i]++; save(); render(); }
+function undo(){ if(!history.length)return; data=JSON.parse(history.pop()); save(); render(); }
+function resetAll(){
+  if(!confirm("リセットする？"))return;
+  saveHistory();
+  sets.forEach(s=>Object.keys(data[s]).forEach(p=>Object.keys(data[s][p]).forEach(i=>data[s][p][i]=0)));
+  save(); render();
+}
+function fullReset(){
+  if(!confirm("完全削除する？"))return;
+  data={}; history=[]; localStorage.removeItem("data");
+  sets.forEach(s=>data[s]={});
+  save(); render();
+}
+function addPerson(){
+  const name=document.getElementById("newPerson").value.trim();
+  if(!name)return;
+  sets.forEach(s=>{
+    if(!data[s][name]){
+      data[s][name]={};
+      config[s].forEach(i=>data[s][name][i]=0);
+    }
+  });
+  document.getElementById("newPerson").value="";
+  save(); render();
+}
+function removePerson(name){
+  if(!confirm(name+"を削除する？"))return;
+  saveHistory();
+  sets.forEach(s=> delete data[s][name]);
+  save(); render();
 }
 
-function table(data,items,t){
-let h="<table border=1><tr><th>名前</th>";
-items.forEach(x=>h+=`<th>${x}</th>`);
-h+="<th>計算</th></tr>";
-
-Object.keys(data).forEach(p=>{
-let total=0;
-items.forEach(x=>total+=(data[p][x]||0));
-
-h+=`<tr><td>${p}</td>`;
-items.forEach(x=>{
-h+=`<td>${data[p][x]||0}
-<button onclick="inc('${t}','${p}','${x}')">+</button></td>`;
-});
-
-h+=`<td>${calc(t,data[p],total)}</td></tr>`;
-});
-
-h+="</table>";
-return h;
-}
-
-// ===== 計算 =====
-function calc(t,d,total){
-if(total==0)return "-";
-
-if(t=="r"){
-return `ab:${pct((d.a+d.b)/total)} a:${pct(d.a/total)} dm:${pct(d.dm/total)}`;
-}
-if(t=="s"){
-return `効:${pct(((d["◎"]+d["○"])-d["✕"])/total)} ミ:${pct(d["✕"]/total)}`;
-}
-if(t=="a"){
-let dec=d["◎"]/total;
-let miss=d["✕"]/total;
-return `決:${pct(dec)} 効:${pct(dec-miss)} ミ:${pct(miss)}`;
-}
-}
-
-function pct(x){
-return (x*100).toFixed(1)+"%";
-}
-
-// ===== カウント =====
-function inc(t,p,x){
-let set=db[current];
-if(!set[t][p])set[t][p]={};
-if(!set[t][p][x])set[t][p][x]=0;
-set[t][p][x]++;
-save();
 render();
-}
-
-// ===== 合算（選択のみ）=====
-function merge(){
-let res={r:{},s:{},a:{}};
-
-let selected=[...document.querySelectorAll(".sel:checked")];
-
-if(selected.length===0){
-alert("セットを選択して");
-return;
-}
-
-selected.forEach(c=>{
-let set=db[c.dataset.i];
-
-["r","s","a"].forEach(t=>{
-Object.keys(set[t]).forEach(p=>{
-if(!res[t][p])res[t][p]={};
-Object.keys(set[t][p]).forEach(x=>{
-res[t][p][x]=(res[t][p][x]||0)+set[t][p][x];
-});
-});
-});
-});
-
-let html="<h3>合算結果</h3>";
-html+=table(res.r,cfg.r);
-html+=table(res.s,cfg.s);
-html+=table(res.a,cfg.a);
-
-result.innerHTML=html;
-}
-
-// ===== 初期表示 =====
-render();
-
 </script>
 
 </body>
