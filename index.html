@@ -77,7 +77,6 @@ button:hover { opacity: 0.85; }
 .btn-main { background: #4a90e2; color: white; }   /* 青：メイン操作 */
 .btn-danger { background: #e74c3c; color: white; } /* 赤：危険操作 */
 .btn-green { background: #4CAF50; color: white; }  /* 緑：戻る系 */
-.btn-gray { background: #aaa; color: white; }      /* 使わないが残す */
 
 /* 入力欄 */
 input {
@@ -128,7 +127,7 @@ input {
 const config = {
   "レセプション": ["a","b","c","dm"],
   "サーブ": ["◎","○","△","✕"],
-  "アタック": ["◎","○","△","✕","B"]
+  "アタック": ["◎","○","△","✕","B×","B"]   /* ← B× を追加 */
 };
 const sections = Object.keys(config);
 
@@ -259,11 +258,14 @@ function render(){
 
       if(s==="アタック"){
         const good=data[s][p]["◎"]||0;
-        const miss=data[s][p]["✕"]||0;
-        const 決定率=safeDiv(good,total);
-        const ミス率=safeDiv(miss,total);
-        const 効果率=決定率-ミス率;
-        const 配給率=safeDiv(total,teamTotal);
+
+        /* ★ 変更：ミス率 = (✕ + B×) / total */
+        const miss = (data[s][p]["✕"]||0) + (data[s][p]["B×"]||0);
+
+        const 決定率 = safeDiv(good,total);
+        const ミス率 = safeDiv(miss,total);
+        const 効果率 = 決定率 - ミス率;
+        const 配給率 = safeDiv(total,teamTotal);
 
         row += `<td>${pct(配給率)}</td>`;
         row += `<td>${pct(決定率)}</td>`;
@@ -450,7 +452,10 @@ function renderMergedResult(){
 
       if(s==="アタック"){
         const good=result[s][p]["◎"]||0;
-        const miss=result[s][p]["✕"]||0;
+
+        /* ★ 合算結果も同じくミス率 = (✕ + B×) / total */
+        const miss = (result[s][p]["✕"]||0) + (result[s][p]["B×"]||0);
+
         const 決定率=safeDiv(good,total);
         const ミス率=safeDiv(miss,total);
         const 効果率=決定率-ミス率;
