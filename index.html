@@ -2,250 +2,234 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>データ</title>
+<title>記録</title>
 <style>
-  body { font-family: sans-serif; padding: 20px; }
+body { font-family: sans-serif; padding:10px; }
+button { margin:2px; }
+input { margin:4px; }
+.box { border:1px solid #ccc; margin:10px 0; padding:10px; }
+.active { background:#ddd; }
 
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 20px;
-  }
-
-  th, td {
-    border: 1px solid #ccc;
-    padding: 6px;
-    text-align: center;
-    font-size: 14px;
-  }
-
-  button { margin: 2px; }
-
-  input {
-    padding: 10px;
-    font-size: 16px;
-    width: 200px;
-  }
+.hide button:not(.toggle){ display:none; }
+.hide { font-size:18px; }
 </style>
 </head>
 <body>
 
-<h1>カウンター</h1>
+<button class="toggle" onclick="toggleView()">表示切替</button>
 
-<button onclick="undo()">1つ戻る</button>
-<button onclick="resetAll()">リセット</button>
-<button onclick="fullReset()">完全リセット</button>
+<h3>カテゴリ</h3>
+<input id="catInput" placeholder="カテゴリ">
+<button onclick="addCategory()">追加</button>
+<div id="cats"></div>
 
-<h3>個人追加</h3>
-<input id="newPerson" placeholder="名前">
-<button onclick="addPerson()">追加</button>
+<h3>日付</h3>
+<input type="date" id="date">
 
-<div id="app"></div>
+<h3>相手</h3>
+<input id="opponent">
+<button onclick="addMatch()">追加</button>
+<div id="matches"></div>
+
+<button onclick="addSet()">＋セット</button>
+<label><input type="checkbox" id="inherit">人引き継ぎ</label>
+
+<div id="sets"></div>
+
+<hr>
+<button onclick="merge()">合算</button>
+<button onclick="del()">削除</button>
+
+<div id="result"></div>
 
 <script>
 
-const config = {
-  "レセプション": ["a","b","c","dm"],
-  "サーブ": ["◎","○","△","✕"],
-  "アタック": ["◎","○","△","✕","B"]
+const cfg={
+r:["a","b","c","dm"],
+s:["◎","○","△","✕"],
+a:["◎","○","△","✕","B"]
 };
 
-const sets = Object.keys(config);
+let db=JSON.parse(localStorage.getItem("db"))||{};
+let curCat="",curDate="",curMatch="";
+document.getElementById("date").value=new Date().toISOString().split("T")[0];
 
-let data = JSON.parse(localStorage.getItem("data")) || {};
-let history = [];
+function save(){localStorage.setItem("db",JSON.stringify(db));}
 
-sets.forEach(s => { if (!data[s]) data[s] = {}; });
+function toggleView(){document.body.classList.toggle("hide");}
 
-function save(){ localStorage.setItem("data", JSON.stringify(data)); }
-
-function saveHistory(){
-  history.push(JSON.stringify(data));
-  if(history.length>200) history.shift();
+// ===== カテゴリ =====
+function addCategory(){
+const n=catInput.value;
+if(!n)return;
+if(!db[n])db[n]={};
+curCat=n;
+renderCats();save();
 }
 
-// 計算補助
-function safeDiv(a,b){ return b===0 ? 0 : a/b; }
-function pct(v){ return (v*100).toFixed(1)+"%"; }
-
-function render(){
-  const app = document.getElementById("app");
-  app.innerHTML = "";
-
-  sets.forEach(s=>{
-    const items = config[s];
-    let html = `<h2>${s}</h2><table>`;
-
-    // ヘッダ
-    html += `<tr><th>名前</th>`;
-    items.forEach(i=> html+=`<th>${i}</th>`);
-    html += `<th>合計</th>`;
-
-    // 計算列
-    if(s==="レセプション"){
-      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
-    }
-    if(s==="サーブ"){
-      html += `<th>効果率</th><th>ミス率</th>`;
-    }
-    if(s==="アタック"){
-      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
-    }
-
-    html += `</tr>`;
-
-    // 全体合計用
-    let teamTotal = 0;
-
-    Object.keys(data[s]).forEach(p=>{
-      let total = 0;
-      items.forEach(i=>{
-        if(!data[s][p][i]) data[s][p][i]=0;
-        total += data[s][p][i];
-      });
-      teamTotal += total;
-    });
-
-    // 各人
-    Object.keys(data[s]).forEach(p=>{
-      let total = 0;
-      let row = `<tr><td>${p}<br><button onclick="removePerson('${p}')">削除</button></td>`;
-
-      items.forEach(i=>{
-        total += data[s][p][i];
-        row += `<td>${data[s][p][i]}<br><button onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
-      });
-
-      row += `<td>${total}</td>`;
-
-      // レセプション
-      if(s==="レセプション"){
-        const a=data[s][p]["a"]||0;
-        const b=data[s][p]["b"]||0;
-        const dm=data[s][p]["dm"]||0;
-
-        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
-        row += `<td>${pct(safeDiv(a,total))}</td>`;
-        row += `<td>${pct(safeDiv(dm,total))}</td>`;
-      }
-
-      // サーブ
-      if(s==="サーブ"){
-        const good=(data[s][p]["◎"]||0)+(data[s][p]["○"]||0);
-        const miss=data[s][p]["✕"]||0;
-
-        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
-        row += `<td>${pct(safeDiv(miss,total))}</td>`;
-      }
-
-      // アタック
-      if(s==="アタック"){
-        const good=data[s][p]["◎"]||0;
-        const miss=data[s][p]["✕"]||0;
-
-        const 決定率=safeDiv(good,total);
-        const ミス率=safeDiv(miss,total);
-        const 効果率=決定率-ミス率;
-        const 配給率=safeDiv(total,teamTotal);
-
-        row += `<td>${pct(配給率)}</td>`;
-        row += `<td>${pct(決定率)}</td>`;
-        row += `<td>${pct(効果率)}</td>`;
-        row += `<td>${pct(ミス率)}</td>`;
-      }
-
-      row += `</tr>`;
-      html += row;
-    });
-
-    // チーム合計行
-    let totalRow = `<tr><th>合計</th>`;
-    let sums={};
-    items.forEach(i=> sums[i]=0);
-
-    Object.keys(data[s]).forEach(p=>{
-      items.forEach(i=> sums[i]+=data[s][p][i]||0);
-    });
-
-    let total=0;
-    items.forEach(i=>{
-      total+=sums[i];
-      totalRow+=`<th>${sums[i]}</th>`;
-    });
-
-    totalRow+=`<th>${total}</th>`;
-
-    // チーム計算
-    if(s==="レセプション"){
-      totalRow+=`<th>${pct(safeDiv(sums["a"]+sums["b"],total))}</th>`;
-      totalRow+=`<th>${pct(safeDiv(sums["a"],total))}</th>`;
-      totalRow+=`<th>${pct(safeDiv(sums["dm"],total))}</th>`;
-    }
-
-    if(s==="サーブ"){
-      const good=sums["◎"]+sums["○"];
-      const miss=sums["✕"];
-      totalRow+=`<th>${pct(safeDiv(good-miss,total))}</th>`;
-      totalRow+=`<th>${pct(safeDiv(miss,total))}</th>`;
-    }
-
-    if(s==="アタック"){
-      const good=sums["◎"];
-      const miss=sums["✕"];
-      const 決定率=safeDiv(good,total);
-      const ミス率=safeDiv(miss,total);
-      const 効果率=決定率-ミス率;
-
-      totalRow+=`<th>-</th>`; // 配給率は全体では意味なし
-      totalRow+=`<th>${pct(決定率)}</th>`;
-      totalRow+=`<th>${pct(効果率)}</th>`;
-      totalRow+=`<th>${pct(ミス率)}</th>`;
-    }
-
-    totalRow+=`</tr>`;
-    html+=totalRow;
-
-    html+=`</table>`;
-    app.innerHTML+=html;
-  });
+function renderCats(){
+cats.innerHTML="";
+Object.keys(db).forEach(c=>{
+let b=document.createElement("button");
+b.textContent=c;
+if(c==curCat)b.className="active";
+b.onclick=()=>{curCat=c;renderMatches();};
+cats.appendChild(b);
+});
 }
 
-// 基本機能
-function inc(s,p,i){ saveHistory(); data[s][p][i]++; save(); render(); }
-function undo(){ if(!history.length)return; data=JSON.parse(history.pop()); save(); render(); }
-function resetAll(){
-  if(!confirm("リセットする？"))return;
-  saveHistory();
-  sets.forEach(s=>Object.keys(data[s]).forEach(p=>Object.keys(data[s][p]).forEach(i=>data[s][p][i]=0)));
-  save(); render();
-}
-function fullReset(){
-  if(!confirm("完全削除する？"))return;
-  data={}; history=[]; localStorage.removeItem("data");
-  sets.forEach(s=>data[s]={});
-  save(); render();
-}
-function addPerson(){
-  const name=document.getElementById("newPerson").value.trim();
-  if(!name)return;
-  sets.forEach(s=>{
-    if(!data[s][name]){
-      data[s][name]={};
-      config[s].forEach(i=>data[s][name][i]=0);
-    }
-  });
-  document.getElementById("newPerson").value="";
-  save(); render();
-}
-function removePerson(name){
-  if(!confirm(name+"を削除する？"))return;
-  saveHistory();
-  sets.forEach(s=> delete data[s][name]);
-  save(); render();
+// ===== 相手 =====
+function addMatch(){
+curDate=date.value;
+const n=opponent.value;
+if(!n)return;
+
+if(!db[curCat][curDate])db[curCat][curDate]={};
+if(!db[curCat][curDate][n])db[curCat][curDate][n]=[];
+
+curMatch=n;
+renderMatches();renderSets();save();
 }
 
-render();
+function renderMatches(){
+matches.innerHTML="";
+if(!db[curCat]||!db[curCat][date.value])return;
+
+Object.keys(db[curCat][date.value]).forEach(m=>{
+let b=document.createElement("button");
+b.textContent=m;
+if(m==curMatch)b.className="active";
+b.onclick=()=>{curMatch=m;renderSets();};
+matches.appendChild(b);
+});
+}
+
+// ===== セット =====
+function addSet(){
+if(!curMatch)return;
+
+let set={r:{},s:{},a:{}};
+
+if(inherit.checked){
+let arr=db[curCat][date.value][curMatch];
+if(arr.length){
+let last=arr[arr.length-1];
+Object.keys(last.r).forEach(p=>{
+set.r[p]={a:0,b:0,c:0,dm:0};
+set.s[p]={"◎":0,"○":0,"△":0,"✕":0};
+set.a[p]={"◎":0,"○":0,"△":0,"✕":0,"B":0};
+});
+}
+}
+
+db[curCat][date.value][curMatch].push(set);
+renderSets();save();
+}
+
+function renderSets(){
+sets.innerHTML="";
+if(!curMatch)return;
+
+db[curCat][date.value][curMatch].forEach((set,i)=>{
+let d=document.createElement("div");
+d.className="box";
+
+d.innerHTML=`<h4><input type="checkbox" class="sel" data-i="${i}">セット${i+1}</h4>`;
+
+d.innerHTML+=table(set.r,cfg.r,"r",i);
+d.innerHTML+=table(set.s,cfg.s,"s",i);
+d.innerHTML+=table(set.a,cfg.a,"a",i);
+
+sets.appendChild(d);
+});
+}
+
+function table(data,items,t,i){
+let h="<table border=1><tr><th>名前</th>";
+items.forEach(x=>h+=`<th>${x}</th>`);
+h+="<th>計算</th></tr>";
+
+Object.keys(data).forEach(p=>{
+let total=0;
+items.forEach(x=>total+=(data[p][x]||0));
+
+h+=`<tr><td>${p}</td>`;
+items.forEach(x=>{
+h+=`<td>${data[p][x]||0}<button onclick="inc(${i},'${t}','${p}','${x}')">+</button></td>`;
+});
+
+h+=`<td>${calc(t,data[p],total)}</td></tr>`;
+});
+
+h+="</table>";
+return h;
+}
+
+// ===== 計算 =====
+function calc(t,d,total){
+if(total==0)return "-";
+
+if(t=="r"){
+return `ab:${pct((d.a+d.b)/total)} a:${pct(d.a/total)} dm:${pct(d.dm/total)}`;
+}
+if(t=="s"){
+return `効:${pct(((d["◎"]+d["○"])-d["✕"])/total)} ミ:${pct(d["✕"]/total)}`;
+}
+if(t=="a"){
+let dec=d["◎"]/total;
+let miss=d["✕"]/total;
+return `決:${pct(dec)} 効:${pct(dec-miss)} ミ:${pct(miss)}`;
+}
+}
+
+function pct(x){return (x*100).toFixed(1)+"%";}
+
+// ===== カウント =====
+function inc(i,t,p,x){
+let set=db[curCat][date.value][curMatch][i];
+if(!set[t][p])set[t][p]={};
+if(!set[t][p][x])set[t][p][x]=0;
+set[t][p][x]++;
+save();renderSets();
+}
+
+// ===== 合算 =====
+function merge(){
+let res={r:{},s:{},a:{}};
+
+document.querySelectorAll(".sel:checked").forEach(c=>{
+let set=db[curCat][date.value][curMatch][c.dataset.i];
+["r","s","a"].forEach(t=>{
+Object.keys(set[t]).forEach(p=>{
+if(!res[t][p])res[t][p]={};
+Object.keys(set[t][p]).forEach(x=>{
+res[t][p][x]=(res[t][p][x]||0)+set[t][p][x];
+});
+});
+});
+});
+
+let html="<h3>合算</h3>";
+html+=table(res.r,cfg.r);
+html+=table(res.s,cfg.s);
+html+=table(res.a,cfg.a);
+
+result.innerHTML=html;
+}
+
+// ===== 削除 =====
+function del(){
+let checks=[...document.querySelectorAll(".sel:checked")];
+if(!confirm("削除する？"))return;
+
+db[curCat][date.value][curMatch]=db[curCat][date.value][curMatch]
+.filter((_,i)=>!checks.find(c=>c.dataset.i==i));
+
+renderSets();save();
+}
+
+renderCats();
+
 </script>
-
 </body>
 </html>
