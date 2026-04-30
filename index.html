@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>カウンター</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  .set { border: 2px solid #333; margin-bottom: 20px; padding: 10px; }
+  .person { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+  button { margin: 3px; }
+</style>
+</head>
+<body>
+
+<h1>カウンター</h1>
+
+<!-- 操作ボタン -->
+<button onclick="undo()">1つ戻る</button>
+<button onclick="resetAll()">リセット</button>
+
+<h3>個人追加</h3>
+<input id="newPerson" placeholder="名前">
+<button onclick="addPerson()">追加</button>
+
+<div id="app"></div>
+
+<script>
+const items = ["a", "b", "c", "d"];
+const sets = ["セット1", "セット2", "セット3"];
+
+let data = JSON.parse(localStorage.getItem("data")) || {};
+let history = [];
+
+// 初期化
+sets.forEach(s => {
+  if (!data[s]) data[s] = {};
+});
+
+// 保存
+function save() {
+  localStorage.setItem("data", JSON.stringify(data));
+}
+
+// 履歴保存
+function saveHistory() {
+  history.push(JSON.stringify(data));
+  if (history.length > 50) history.shift(); // 最大50件
+}
+
+// 表示
+function render() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  sets.forEach(s => {
+    const setDiv = document.createElement("div");
+    setDiv.className = "set";
+    setDiv.innerHTML = `<h2>${s}</h2>`;
+
+    Object.keys(data[s]).forEach(p => {
+      const div = document.createElement("div");
+      div.className = "person";
+
+      let total = 0;
+
+      div.innerHTML += `<h3>${p}</h3>`;
+
+      items.forEach(i => {
+        if (!data[s][p][i]) data[s][p][i] = 0;
+        total += data[s][p][i];
+
+        div.innerHTML += `
+          ${i}: ${data[s][p][i]}
+          <button onclick="inc('${s}','${p}','${i}')">+1</button>
+          <br>
+        `;
+      });
+
+      div.innerHTML += `<strong>合計: ${total}</strong>`;
+
+      const result = total * 2;
+      div.innerHTML += `<br>計算結果: ${result}`;
+
+      setDiv.appendChild(div);
+    });
+
+    app.appendChild(setDiv);
+  });
+}
+
+// カウント
+function inc(s, p, i) {
+  saveHistory();
+  data[s][p][i]++;
+  save();
+  render();
+}
+
+// リセット
+function resetAll() {
+  if (!confirm("本当にリセットする？")) return;
+
+  saveHistory();
+
+  sets.forEach(s => {
+    Object.keys(data[s]).forEach(p => {
+      items.forEach(i => {
+        data[s][p][i] = 0;
+      });
+    });
+  });
+
+  save();
+  render();
+}
+
+// Undo
+function undo() {
+  if (history.length === 0) return alert("戻れる操作がない");
+
+  data = JSON.parse(history.pop());
+  save();
+  render();
+}
+
+// 個人追加
+function addPerson() {
+  const name = document.getElementById("newPerson").value.trim();
+  if (!name) return;
+
+  sets.forEach(s => {
+    if (!data[s][name]) {
+      data[s][name] = {};
+      items.forEach(i => data[s][name][i] = 0);
+    }
+  });
+
+  document.getElementById("newPerson").value = "";
+  save();
+  render();
+}
+
+// 初期表示
+render();
+</script>
+
+</body>
+</html>
