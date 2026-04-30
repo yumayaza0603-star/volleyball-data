@@ -22,12 +22,12 @@ body {
   margin-right: 10px;
 }
 .tabbar button {
-  padding: 10px 18px;
+  padding: 12px 18px;
   border: none;
   border-radius: 6px;
   background: #e0e0e0;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 16px;
   margin-left: 4px;
 }
 .tabbar .active {
@@ -63,17 +63,21 @@ td {
   background: #fff;
 }
 
-/* ボタン */
+/* ボタン（共通） */
 button {
-  padding: 6px 10px;
+  padding: 12px 18px;
   border-radius: 6px;
   border: none;
   cursor: pointer;
+  font-size: 16px;
 }
 button:hover { opacity: 0.85; }
-.btn-main { background: #4a90e2; color: white; }
-.btn-danger { background: #e74c3c; color: white; }
-.btn-gray { background: #aaa; color: white; }
+
+/* 色分け */
+.btn-main { background: #4a90e2; color: white; }   /* 青：メイン操作 */
+.btn-danger { background: #e74c3c; color: white; } /* 赤：危険操作 */
+.btn-green { background: #4CAF50; color: white; }  /* 緑：戻る系 */
+.btn-gray { background: #aaa; color: white; }      /* 使わないが残す */
 
 /* 入力欄 */
 input {
@@ -98,16 +102,17 @@ input {
 <body>
 
 <div class="tabbar" id="tabbar"></div>
+
 <button class="btn-main" onclick="addSet()">＋セット追加</button>
-<button class="btn-gray" onclick="toggleScreenshot()">スクショモード切替</button>
+<button class="btn-main" onclick="toggleScreenshot()">スクショモード切替</button>
 <button class="btn-main" onclick="mergeSets()">選択セット合算</button>
 <button class="btn-danger" onclick="clearMerge()">合算結果を消す</button>
 <button class="btn-danger" onclick="deleteSelectedSets()">選択セット削除</button>
 
 <hr>
 
-<button class="btn-gray" onclick="undo()">1つ戻る</button>
-<button class="btn-gray" onclick="resetAll()">リセット</button>
+<button class="btn-green" onclick="undo()">1つ戻る</button>
+<button class="btn-danger" onclick="resetAll()">リセット</button>
 <button class="btn-danger" onclick="fullReset()">完全リセット</button>
 
 <h3>個人追加</h3>
