@@ -14,24 +14,27 @@
 
   th, td {
     border: 1px solid #ccc;
-    padding: 8px;
+    padding: 6px;
     text-align: center;
+    font-size: 14px;
   }
 
   button { margin: 2px; }
 
-  .controls { margin-bottom: 10px; }
+  input {
+    padding: 10px;
+    font-size: 16px;
+    width: 200px;
+  }
 </style>
 </head>
 <body>
 
 <h1>カウンター</h1>
 
-<div class="controls">
-  <button onclick="undo()">1つ戻る</button>
-  <button onclick="resetAll()">リセット</button>
-  <button onclick="fullReset()">完全リセット</button>
-</div>
+<button onclick="undo()">1つ戻る</button>
+<button onclick="resetAll()">リセット</button>
+<button onclick="fullReset()">完全リセット</button>
 
 <h3>個人追加</h3>
 <input id="newPerson" placeholder="名前">
@@ -40,140 +43,205 @@
 <div id="app"></div>
 
 <script>
-const items = ["a", "b", "c", "d"];
-const sets = ["レセプション", "サーブ", "アタック"];
+
+const config = {
+  "レセプション": ["a","b","c","dm"],
+  "サーブ": ["◎","○","△","✕"],
+  "アタック": ["◎","○","△","✕","B"]
+};
+
+const sets = Object.keys(config);
 
 let data = JSON.parse(localStorage.getItem("data")) || {};
 let history = [];
 
-// 初期化
-sets.forEach(s => {
-  if (!data[s]) data[s] = {};
-});
+sets.forEach(s => { if (!data[s]) data[s] = {}; });
 
-// 保存
-function save() {
-  localStorage.setItem("data", JSON.stringify(data));
-}
+function save(){ localStorage.setItem("data", JSON.stringify(data)); }
 
-// 履歴
-function saveHistory() {
+function saveHistory(){
   history.push(JSON.stringify(data));
-  if (history.length > 200) history.shift();
+  if(history.length>200) history.shift();
 }
 
-// 表示
-function render() {
+// 計算補助
+function safeDiv(a,b){ return b===0 ? 0 : a/b; }
+function pct(v){ return (v*100).toFixed(1)+"%"; }
+
+function render(){
   const app = document.getElementById("app");
   app.innerHTML = "";
 
-  sets.forEach(s => {
-    const div = document.createElement("div");
+  sets.forEach(s=>{
+    const items = config[s];
+    let html = `<h2>${s}</h2><table>`;
 
-    let html = `<h2>${s}</h2>`;
-    html += `<table>`;
-    html += `
-      <tr>
-        <th>名前</th>
-        ${items.map(i => `<th>${i}</th>`).join("")}
-        <th>合計</th>
-        <th>計算</th>
-      </tr>
-    `;
+    // ヘッダ
+    html += `<tr><th>名前</th>`;
+    items.forEach(i=> html+=`<th>${i}</th>`);
+    html += `<th>合計</th>`;
 
-    Object.keys(data[s]).forEach(p => {
+    // 計算列
+    if(s==="レセプション"){
+      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
+    }
+    if(s==="サーブ"){
+      html += `<th>効果率</th><th>ミス率</th>`;
+    }
+    if(s==="アタック"){
+      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
+    }
+
+    html += `</tr>`;
+
+    // 全体合計用
+    let teamTotal = 0;
+
+    Object.keys(data[s]).forEach(p=>{
       let total = 0;
-
-      let row = `<tr><td>${p}</td>`;
-
-      items.forEach(i => {
-        if (!data[s][p][i]) data[s][p][i] = 0;
+      items.forEach(i=>{
+        if(!data[s][p][i]) data[s][p][i]=0;
         total += data[s][p][i];
+      });
+      teamTotal += total;
+    });
 
-        row += `
-          <td>
-            ${data[s][p][i]}<br>
-            <button onclick="inc('${s}','${p}','${i}')">+1</button>
-          </td>
-        `;
+    // 各人
+    Object.keys(data[s]).forEach(p=>{
+      let total = 0;
+      let row = `<tr><td>${p}<br><button onclick="removePerson('${p}')">削除</button></td>`;
+
+      items.forEach(i=>{
+        total += data[s][p][i];
+        row += `<td>${data[s][p][i]}<br><button onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
       });
 
-      const result = total * 2;
-
       row += `<td>${total}</td>`;
-      row += `<td>${result}</td>`;
-      row += `</tr>`;
 
+      // レセプション
+      if(s==="レセプション"){
+        const a=data[s][p]["a"]||0;
+        const b=data[s][p]["b"]||0;
+        const dm=data[s][p]["dm"]||0;
+
+        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
+        row += `<td>${pct(safeDiv(a,total))}</td>`;
+        row += `<td>${pct(safeDiv(dm,total))}</td>`;
+      }
+
+      // サーブ
+      if(s==="サーブ"){
+        const good=(data[s][p]["◎"]||0)+(data[s][p]["○"]||0);
+        const miss=data[s][p]["✕"]||0;
+
+        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
+        row += `<td>${pct(safeDiv(miss,total))}</td>`;
+      }
+
+      // アタック
+      if(s==="アタック"){
+        const good=data[s][p]["◎"]||0;
+        const miss=data[s][p]["✕"]||0;
+
+        const 決定率=safeDiv(good,total);
+        const ミス率=safeDiv(miss,total);
+        const 効果率=決定率-ミス率;
+        const 配給率=safeDiv(total,teamTotal);
+
+        row += `<td>${pct(配給率)}</td>`;
+        row += `<td>${pct(決定率)}</td>`;
+        row += `<td>${pct(効果率)}</td>`;
+        row += `<td>${pct(ミス率)}</td>`;
+      }
+
+      row += `</tr>`;
       html += row;
     });
 
-    html += `</table>`;
-    div.innerHTML = html;
-    app.appendChild(div);
-  });
-}
+    // チーム合計行
+    let totalRow = `<tr><th>合計</th>`;
+    let sums={};
+    items.forEach(i=> sums[i]=0);
 
-// カウント
-function inc(s, p, i) {
-  saveHistory();
-  data[s][p][i]++;
-  save();
-  render();
-}
-
-// Undo
-function undo() {
-  if (history.length === 0) return alert("戻れない");
-
-  data = JSON.parse(history.pop());
-  save();
-  render();
-}
-
-// リセット（数値だけ）
-function resetAll() {
-  if (!confirm("リセットする？")) return;
-
-  saveHistory();
-
-  sets.forEach(s => {
-    Object.keys(data[s]).forEach(p => {
-      items.forEach(i => data[s][p][i] = 0);
+    Object.keys(data[s]).forEach(p=>{
+      items.forEach(i=> sums[i]+=data[s][p][i]||0);
     });
+
+    let total=0;
+    items.forEach(i=>{
+      total+=sums[i];
+      totalRow+=`<th>${sums[i]}</th>`;
+    });
+
+    totalRow+=`<th>${total}</th>`;
+
+    // チーム計算
+    if(s==="レセプション"){
+      totalRow+=`<th>${pct(safeDiv(sums["a"]+sums["b"],total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(sums["a"],total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(sums["dm"],total))}</th>`;
+    }
+
+    if(s==="サーブ"){
+      const good=sums["◎"]+sums["○"];
+      const miss=sums["✕"];
+      totalRow+=`<th>${pct(safeDiv(good-miss,total))}</th>`;
+      totalRow+=`<th>${pct(safeDiv(miss,total))}</th>`;
+    }
+
+    if(s==="アタック"){
+      const good=sums["◎"];
+      const miss=sums["✕"];
+      const 決定率=safeDiv(good,total);
+      const ミス率=safeDiv(miss,total);
+      const 効果率=決定率-ミス率;
+
+      totalRow+=`<th>-</th>`; // 配給率は全体では意味なし
+      totalRow+=`<th>${pct(決定率)}</th>`;
+      totalRow+=`<th>${pct(効果率)}</th>`;
+      totalRow+=`<th>${pct(ミス率)}</th>`;
+    }
+
+    totalRow+=`</tr>`;
+    html+=totalRow;
+
+    html+=`</table>`;
+    app.innerHTML+=html;
   });
-
-  save();
-  render();
 }
 
-// 完全リセット
-function fullReset() {
-  if (!confirm("完全削除する？")) return;
-
-  data = {};
-  history = [];
-  localStorage.removeItem("data");
-
-  sets.forEach(s => data[s] = {});
-  save();
-  render();
+// 基本機能
+function inc(s,p,i){ saveHistory(); data[s][p][i]++; save(); render(); }
+function undo(){ if(!history.length)return; data=JSON.parse(history.pop()); save(); render(); }
+function resetAll(){
+  if(!confirm("リセットする？"))return;
+  saveHistory();
+  sets.forEach(s=>Object.keys(data[s]).forEach(p=>Object.keys(data[s][p]).forEach(i=>data[s][p][i]=0)));
+  save(); render();
 }
-
-// 個人追加
-function addPerson() {
-  const name = document.getElementById("newPerson").value.trim();
-  if (!name) return;
-
-  sets.forEach(s => {
-    if (!data[s][name]) {
-      data[s][name] = {};
-      items.forEach(i => data[s][name][i] = 0);
+function fullReset(){
+  if(!confirm("完全削除する？"))return;
+  data={}; history=[]; localStorage.removeItem("data");
+  sets.forEach(s=>data[s]={});
+  save(); render();
+}
+function addPerson(){
+  const name=document.getElementById("newPerson").value.trim();
+  if(!name)return;
+  sets.forEach(s=>{
+    if(!data[s][name]){
+      data[s][name]={};
+      config[s].forEach(i=>data[s][name][i]=0);
     }
   });
-
-  document.getElementById("newPerson").value = "";
-  save();
-  render();
+  document.getElementById("newPerson").value="";
+  save(); render();
+}
+function removePerson(name){
+  if(!confirm(name+"を削除する？"))return;
+  saveHistory();
+  sets.forEach(s=> delete data[s][name]);
+  save(); render();
 }
 
 render();
