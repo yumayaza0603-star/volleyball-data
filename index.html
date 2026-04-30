@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>カウンター（タブ＋合算＋スクショ）</title>
+<title>カウンター（タブ＋合算＋スクショ＋編集）</title>
 
 <style>
 body {
@@ -97,12 +97,13 @@ input {
 </head>
 <body>
 
-<h1>カウンター（タブ＋合算＋スクショ）</h1>
+<h1>カウンター（タブ＋合算＋スクショ＋編集）</h1>
 
 <div class="tabbar" id="tabbar"></div>
 <button class="btn-main" onclick="addSet()">＋セット追加</button>
 <button class="btn-gray" onclick="toggleScreenshot()">スクショモード切替</button>
 <button class="btn-main" onclick="mergeSets()">選択セット合算</button>
+<button class="btn-danger" onclick="clearMerge()">合算結果を消す</button>
 
 <hr>
 
@@ -131,6 +132,7 @@ const sections = Object.keys(config);
 let db = JSON.parse(localStorage.getItem("db_tabs")) || [];
 let current = 0;
 let history = [];
+let mergeCache = null;
 
 /* ====== 保存 ====== */
 function save(){ localStorage.setItem("db_tabs", JSON.stringify(db)); }
@@ -141,7 +143,7 @@ function saveHistory(){
 
 /* ====== セット追加 ====== */
 function addSet(){
-  const newSet = {};
+  const newSet = { name: "セット" + (db.length+1) };
   sections.forEach(s => newSet[s] = {});
   db.push(newSet);
   current = db.length - 1;
@@ -154,7 +156,7 @@ function renderTabs(){
   const bar = document.getElementById("tabbar");
   bar.innerHTML = "";
 
-  db.forEach((_,i)=>{
+  db.forEach((set,i)=>{
     const wrap = document.createElement("span");
     wrap.className = "tab-item";
 
@@ -164,8 +166,19 @@ function renderTabs(){
     chk.dataset.index = i;
 
     const b = document.createElement("button");
-    b.textContent = "セット" + (i+1);
+    b.textContent = set.name || ("セット" + (i+1));
     if(i === current) b.classList.add("active");
+
+    // セット名編集（ダブルクリック）
+    b.ondblclick = ()=>{
+      const newName = prompt("セット名を入力", b.textContent);
+      if(newName){
+        db[i].name = newName;
+        save();
+        renderTabs();
+      }
+    };
+
     b.onclick = ()=>{ current = i; render(); };
 
     wrap.appendChild(chk);
@@ -371,7 +384,16 @@ function mergeSets(){
     });
   });
 
-  let html = `<h2>合算結果（${selected.length}セット）</h2>`;
+  mergeCache = result;
+  renderMergedResult();
+}
+
+/* ====== 合算結果描画 ====== */
+function renderMergedResult(){
+  if(!mergeCache) return;
+
+  const result = mergeCache;
+  let html = `<h2>合算結果</h2>`;
 
   sections.forEach(s=>{
     const items = config[s];
@@ -445,6 +467,12 @@ function mergeSets(){
   });
 
   document.getElementById("mergeResult").innerHTML = html;
+}
+
+/* ====== 合算結果クリア ====== */
+function clearMerge(){
+  mergeCache = null;
+  document.getElementById("mergeResult").innerHTML = "";
 }
 
 render();
