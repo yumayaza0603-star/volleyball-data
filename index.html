@@ -118,6 +118,153 @@ input {
 <div id="mergeResult"></div>
 
 <script>
+
+/* ====== 設定 ====== */
+const config = {
+  "レセプション": ["a","b","c","dm"],
+  "サーブ": ["◎","○","△","✕"],
+  "アタック": ["◎","○","△","✕","B"]
+};
+const sections = Object.keys(config);
+
+/* ====== データ ====== */
+let db = JSON.parse(localStorage.getItem("db_tabs")) || [];
+let current = 0;
+let history = [];
+
+/* ====== 保存 ====== */
+function save(){ localStorage.setItem("db_tabs", JSON.stringify(db)); }
+function saveHistory(){
+  history.push(JSON.stringify(db));
+  if(history.length > 200) history.shift();
+}
+
+/* ====== セット追加 ====== */
+function addSet(){
+  const newSet = {};
+  sections.forEach(s => newSet[s] = {});
+  db.push(newSet);
+  current = db.length - 1;
+  save();
+  render();
+}
+
+/* ====== タブ描画 ====== */
+function renderTabs(){
+  const bar = document.getElementById("tabbar");
+  bar.innerHTML = "";
+
+  db.forEach((_,i)=>{
+    const wrap = document.createElement("span");
+    wrap.className = "tab-item";
+
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.className = "tab-check";
+    chk.dataset.index = i;
+
+    const b = document.createElement("button");
+    b.textContent = "セット" + (i+1);
+    if(i === current) b.classList.add("active");
+    b.onclick = ()=>{ current = i; render(); };
+
+    wrap.appendChild(chk);
+    wrap.appendChild(b);
+    bar.appendChild(wrap);
+  });
+}
+
+/* ====== 計算補助 ====== */
+function safeDiv(a,b){ return b===0 ? 0 : a/b; }
+function pct(v){ return (v*100).toFixed(1)+"%"; }
+
+/* ====== 描画 ====== */
+function render(){
+  renderTabs();
+
+  if(db.length === 0){
+    document.getElementById("app").innerHTML = "セットがありません";
+    return;
+  }
+
+  const data = db[current];
+  let html = "";
+
+  sections.forEach(s=>{
+    const items = config[s];
+
+    html += `<div class="section-card"><h2>${s}</h2><table>`;
+    html += `<tr><th>名前</th>`;
+    items.forEach(i=> html+=`<th>${i}</th>`);
+    html += `<th>合計</th>`;
+
+    if(s==="レセプション"){
+      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
+    }
+    if(s==="サーブ"){
+      html += `<th>効果率</th><th>ミス率</th>`;
+    }
+    if(s==="アタック"){
+      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
+    }
+    html += `</tr>`;
+
+    let teamTotal = 0;
+    Object.keys(data[s]).forEach(p=>{
+      items.forEach(i=> teamTotal += (data[s][p][i]||0));
+    });
+
+    Object.keys(data[s]).forEach(p=>{
+      let total = 0;
+      let row = `<tr><td>${p}<br><button class="btn-danger" onclick="removePerson('${p}')">削除</button></td>`;
+
+      items.forEach(i=>{
+        total += data[s][p][i];
+        row += `<td>${data[s][p][i]}<br><button class="btn-main" onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
+      });
+
+      row += `<td>${total}</td>`;
+
+      if(s==="レセプション"){
+        const a=data[s][p]["a"]||0;
+        const b=data[s][p]["b"]||0;
+        const dm=data[s][p]["dm"]||0;
+        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
+        row += `<td>${pct(safeDiv(a,total))}</td>`;
+        row += `<td>${pct(safeDiv(dm,total))}</td>`;
+      }
+
+      if(s==="サーブ"){
+        const good=(data[s][p]["◎"]||0)+(data[s][p]["○"]||0);
+        const miss=data[s][p]["✕"]||0;
+        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
+        row += `<td>${pct(safeDiv(miss,total))}</td>`;
+      }
+
+      if(s==="アタック"){
+        const good=data[s][p]["◎"]||0;
+        const miss=data[s][p]["✕"]||0;
+        const 決定率=safeDiv(good,total);
+        const ミス率=safeDiv(miss,total);
+        const 効果率=決定率-ミス率;
+        const 配給率=safeDiv(total,teamTotal);
+
+        row += `<td>${pct(配給率)}</td>`;
+        row += `<td>${pct(決定率)}</td>`;
+        row += `<td>${pct(効果率)}</td>`;
+        row += `<td>${pct(ミス率)}</td>`;
+      }
+
+      row += `</tr>`;
+      html += row;
+    });
+
+    html += `</table></div>`;
+  });
+
+  document.getElementById("app").innerHTML = html;
+}
+
 /* ====== 操作 ====== */
 function inc(s,p,i){
   saveHistory();
@@ -204,7 +351,6 @@ function mergeSets(){
     return;
   }
 
-  // 合算データ作成
   const result = {};
   sections.forEach(s=>{
     result[s] = {};
@@ -225,7 +371,6 @@ function mergeSets(){
     });
   });
 
-  // 合算結果を表示
   let html = `<h2>合算結果（${selected.length}セット）</h2>`;
 
   sections.forEach(s=>{
@@ -246,7 +391,6 @@ function mergeSets(){
     }
     html += `</tr>`;
 
-    // チーム合計
     let teamTotal = 0;
     Object.keys(result[s]).forEach(p=>{
       items.forEach(i=> teamTotal += result[s][p][i]);
