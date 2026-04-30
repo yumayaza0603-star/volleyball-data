@@ -3,41 +3,83 @@
 <head>
 <meta charset="UTF-8">
 <title>カウンター（タブ対応）</title>
-<style>
-body { font-family: sans-serif; padding: 20px; }
 
+<style>
+body {
+  font-family: "Segoe UI", sans-serif;
+  padding: 20px;
+  background: #f5f5f7;
+  color: #333;
+}
+
+/* タブ */
+.tabbar {
+  margin-bottom: 15px;
+}
+.tabbar button {
+  padding: 10px 18px;
+  margin-right: 6px;
+  border: none;
+  border-radius: 6px;
+  background: #e0e0e0;
+  cursor: pointer;
+  font-size: 15px;
+}
+.tabbar .active {
+  background: #4a90e2;
+  color: white;
+  font-weight: bold;
+}
+
+/* セクションカード */
+.section-card {
+  background: white;
+  padding: 16px;
+  margin-bottom: 25px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* 表 */
 table {
   border-collapse: collapse;
   width: 100%;
-  margin-bottom: 20px;
+  margin-top: 10px;
 }
-
-th, td {
-  border: 1px solid #ccc;
-  padding: 6px;
-  text-align: center;
+th {
+  background: #4a90e2;
+  color: white;
+  padding: 8px;
   font-size: 14px;
 }
+td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  background: #fff;
+}
 
-button { margin: 2px; }
+/* ボタン */
+button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+button:hover {
+  opacity: 0.85;
+}
+.btn-main { background: #4a90e2; color: white; }
+.btn-danger { background: #e74c3c; color: white; }
+.btn-gray { background: #aaa; color: white; }
 
+/* 入力欄 */
 input {
   padding: 10px;
   font-size: 16px;
   width: 200px;
-}
-
-.tabbar button {
-  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
   margin-right: 6px;
-  border: 1px solid #aaa;
-  background: #eee;
-  cursor: pointer;
-}
-
-.tabbar .active {
-  background: #ccc;
-  font-weight: bold;
 }
 </style>
 </head>
@@ -46,47 +88,43 @@ input {
 <h1>カウンター（タブ対応）</h1>
 
 <div class="tabbar" id="tabbar"></div>
-<button onclick="addSet()">＋セット追加</button>
+<button class="btn-main" onclick="addSet()">＋セット追加</button>
 
 <hr>
 
-<button onclick="undo()">1つ戻る</button>
-<button onclick="resetAll()">リセット</button>
-<button onclick="fullReset()">完全リセット</button>
+<button class="btn-gray" onclick="undo()">1つ戻る</button>
+<button class="btn-gray" onclick="resetAll()">リセット</button>
+<button class="btn-danger" onclick="fullReset()">完全リセット</button>
 
 <h3>個人追加</h3>
 <input id="newPerson" placeholder="名前">
-<button onclick="addPerson()">追加</button>
+<button class="btn-main" onclick="addPerson()">追加</button>
 
 <div id="app"></div>
 
 <script>
 
-// ====== 設定 ======
+/* ====== 設定 ====== */
 const config = {
   "レセプション": ["a","b","c","dm"],
   "サーブ": ["◎","○","△","✕"],
   "アタック": ["◎","○","△","✕","B"]
 };
-
 const sections = Object.keys(config);
 
-// ====== データ構造 ======
+/* ====== データ ====== */
 let db = JSON.parse(localStorage.getItem("db_tabs")) || [];
 let current = 0;
 let history = [];
 
-// ====== 保存 ======
-function save(){
-  localStorage.setItem("db_tabs", JSON.stringify(db));
-}
-
+/* ====== 保存 ====== */
+function save(){ localStorage.setItem("db_tabs", JSON.stringify(db)); }
 function saveHistory(){
   history.push(JSON.stringify(db));
   if(history.length > 200) history.shift();
 }
 
-// ====== セット追加 ======
+/* ====== セット追加 ====== */
 function addSet(){
   const newSet = {};
   sections.forEach(s => newSet[s] = {});
@@ -96,11 +134,10 @@ function addSet(){
   render();
 }
 
-// ====== タブ描画 ======
+/* ====== タブ描画 ====== */
 function renderTabs(){
   const bar = document.getElementById("tabbar");
   bar.innerHTML = "";
-
   db.forEach((_,i)=>{
     const b = document.createElement("button");
     b.textContent = "セット" + (i+1);
@@ -110,11 +147,11 @@ function renderTabs(){
   });
 }
 
-// ====== 計算補助 ======
+/* ====== 計算補助 ====== */
 function safeDiv(a,b){ return b===0 ? 0 : a/b; }
 function pct(v){ return (v*100).toFixed(1)+"%"; }
 
-// ====== 描画 ======
+/* ====== 描画 ====== */
 function render(){
   renderTabs();
 
@@ -128,8 +165,8 @@ function render(){
 
   sections.forEach(s=>{
     const items = config[s];
-    html += `<h2>${s}</h2><table>`;
 
+    html += `<div class="section-card"><h2>${s}</h2><table>`;
     html += `<tr><th>名前</th>`;
     items.forEach(i=> html+=`<th>${i}</th>`);
     html += `<th>合計</th>`;
@@ -143,23 +180,20 @@ function render(){
     if(s==="アタック"){
       html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
     }
-
     html += `</tr>`;
 
-    // チーム合計計算
     let teamTotal = 0;
     Object.keys(data[s]).forEach(p=>{
       items.forEach(i=> teamTotal += (data[s][p][i]||0));
     });
 
-    // 各人
     Object.keys(data[s]).forEach(p=>{
       let total = 0;
-      let row = `<tr><td>${p}<br><button onclick="removePerson('${p}')">削除</button></td>`;
+      let row = `<tr><td>${p}<br><button class="btn-danger" onclick="removePerson('${p}')">削除</button></td>`;
 
       items.forEach(i=>{
         total += data[s][p][i];
-        row += `<td>${data[s][p][i]}<br><button onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
+        row += `<td>${data[s][p][i]}<br><button class="btn-main" onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
       });
 
       row += `<td>${total}</td>`;
@@ -198,13 +232,13 @@ function render(){
       html += row;
     });
 
-    html += `</table>`;
+    html += `</table></div>`;
   });
 
   document.getElementById("app").innerHTML = html;
 }
 
-// ====== 操作 ======
+/* ====== 操作 ====== */
 function inc(s,p,i){
   saveHistory();
   db[current][s][p][i]++;
