@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>カウンター（タブ対応）</title>
+<title>カウンター（タブ＋合算＋スクショ）</title>
 
 <style>
 body {
@@ -16,14 +16,19 @@ body {
 .tabbar {
   margin-bottom: 15px;
 }
+.tab-item {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 10px;
+}
 .tabbar button {
   padding: 10px 18px;
-  margin-right: 6px;
   border: none;
   border-radius: 6px;
   background: #e0e0e0;
   cursor: pointer;
   font-size: 15px;
+  margin-left: 4px;
 }
 .tabbar .active {
   background: #4a90e2;
@@ -65,9 +70,7 @@ button {
   border: none;
   cursor: pointer;
 }
-button:hover {
-  opacity: 0.85;
-}
+button:hover { opacity: 0.85; }
 .btn-main { background: #4a90e2; color: white; }
 .btn-danger { background: #e74c3c; color: white; }
 .btn-gray { background: #aaa; color: white; }
@@ -81,14 +84,25 @@ input {
   border: 1px solid #ccc;
   margin-right: 6px;
 }
+
+/* ===== スクショモード ===== */
+.screenshot td {
+  font-size: 22px;
+  padding: 12px;
+}
+.screenshot button {
+  display: none;
+}
 </style>
 </head>
 <body>
 
-<h1>カウンター（タブ対応）</h1>
+<h1>カウンター（タブ＋合算＋スクショ）</h1>
 
 <div class="tabbar" id="tabbar"></div>
 <button class="btn-main" onclick="addSet()">＋セット追加</button>
+<button class="btn-gray" onclick="toggleScreenshot()">スクショモード切替</button>
+<button class="btn-main" onclick="mergeSets()">選択セット合算</button>
 
 <hr>
 
@@ -101,143 +115,9 @@ input {
 <button class="btn-main" onclick="addPerson()">追加</button>
 
 <div id="app"></div>
+<div id="mergeResult"></div>
 
 <script>
-
-/* ====== 設定 ====== */
-const config = {
-  "レセプション": ["a","b","c","dm"],
-  "サーブ": ["◎","○","△","✕"],
-  "アタック": ["◎","○","△","✕","B"]
-};
-const sections = Object.keys(config);
-
-/* ====== データ ====== */
-let db = JSON.parse(localStorage.getItem("db_tabs")) || [];
-let current = 0;
-let history = [];
-
-/* ====== 保存 ====== */
-function save(){ localStorage.setItem("db_tabs", JSON.stringify(db)); }
-function saveHistory(){
-  history.push(JSON.stringify(db));
-  if(history.length > 200) history.shift();
-}
-
-/* ====== セット追加 ====== */
-function addSet(){
-  const newSet = {};
-  sections.forEach(s => newSet[s] = {});
-  db.push(newSet);
-  current = db.length - 1;
-  save();
-  render();
-}
-
-/* ====== タブ描画 ====== */
-function renderTabs(){
-  const bar = document.getElementById("tabbar");
-  bar.innerHTML = "";
-  db.forEach((_,i)=>{
-    const b = document.createElement("button");
-    b.textContent = "セット" + (i+1);
-    if(i === current) b.classList.add("active");
-    b.onclick = ()=>{ current = i; render(); };
-    bar.appendChild(b);
-  });
-}
-
-/* ====== 計算補助 ====== */
-function safeDiv(a,b){ return b===0 ? 0 : a/b; }
-function pct(v){ return (v*100).toFixed(1)+"%"; }
-
-/* ====== 描画 ====== */
-function render(){
-  renderTabs();
-
-  if(db.length === 0){
-    document.getElementById("app").innerHTML = "セットがありません";
-    return;
-  }
-
-  const data = db[current];
-  let html = "";
-
-  sections.forEach(s=>{
-    const items = config[s];
-
-    html += `<div class="section-card"><h2>${s}</h2><table>`;
-    html += `<tr><th>名前</th>`;
-    items.forEach(i=> html+=`<th>${i}</th>`);
-    html += `<th>合計</th>`;
-
-    if(s==="レセプション"){
-      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
-    }
-    if(s==="サーブ"){
-      html += `<th>効果率</th><th>ミス率</th>`;
-    }
-    if(s==="アタック"){
-      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
-    }
-    html += `</tr>`;
-
-    let teamTotal = 0;
-    Object.keys(data[s]).forEach(p=>{
-      items.forEach(i=> teamTotal += (data[s][p][i]||0));
-    });
-
-    Object.keys(data[s]).forEach(p=>{
-      let total = 0;
-      let row = `<tr><td>${p}<br><button class="btn-danger" onclick="removePerson('${p}')">削除</button></td>`;
-
-      items.forEach(i=>{
-        total += data[s][p][i];
-        row += `<td>${data[s][p][i]}<br><button class="btn-main" onclick="inc('${s}','${p}','${i}')">+1</button></td>`;
-      });
-
-      row += `<td>${total}</td>`;
-
-      if(s==="レセプション"){
-        const a=data[s][p]["a"]||0;
-        const b=data[s][p]["b"]||0;
-        const dm=data[s][p]["dm"]||0;
-        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
-        row += `<td>${pct(safeDiv(a,total))}</td>`;
-        row += `<td>${pct(safeDiv(dm,total))}</td>`;
-      }
-
-      if(s==="サーブ"){
-        const good=(data[s][p]["◎"]||0)+(data[s][p]["○"]||0);
-        const miss=data[s][p]["✕"]||0;
-        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
-        row += `<td>${pct(safeDiv(miss,total))}</td>`;
-      }
-
-      if(s==="アタック"){
-        const good=data[s][p]["◎"]||0;
-        const miss=data[s][p]["✕"]||0;
-        const 決定率=safeDiv(good,total);
-        const ミス率=safeDiv(miss,total);
-        const 効果率=決定率-ミス率;
-        const 配給率=safeDiv(total,teamTotal);
-
-        row += `<td>${pct(配給率)}</td>`;
-        row += `<td>${pct(決定率)}</td>`;
-        row += `<td>${pct(効果率)}</td>`;
-        row += `<td>${pct(ミス率)}</td>`;
-      }
-
-      row += `</tr>`;
-      html += row;
-    });
-
-    html += `</table></div>`;
-  });
-
-  document.getElementById("app").innerHTML = html;
-}
-
 /* ====== 操作 ====== */
 function inc(s,p,i){
   saveHistory();
@@ -297,8 +177,133 @@ function removePerson(name){
   render();
 }
 
-render();
+/* ====== スクショモード ====== */
+let screenshotMode = false;
 
+function toggleScreenshot(){
+  screenshotMode = !screenshotMode;
+  const app = document.getElementById("app");
+  if(screenshotMode){
+    app.classList.add("screenshot");
+  } else {
+    app.classList.remove("screenshot");
+  }
+}
+
+/* ====== 合算機能 ====== */
+function mergeSets(){
+  const checkboxes = document.querySelectorAll(".tab-check");
+  const selected = [];
+
+  checkboxes.forEach((c,i)=>{
+    if(c.checked) selected.push(i);
+  });
+
+  if(selected.length === 0){
+    alert("合算するセットを選んでください");
+    return;
+  }
+
+  // 合算データ作成
+  const result = {};
+  sections.forEach(s=>{
+    result[s] = {};
+  });
+
+  selected.forEach(idx=>{
+    const set = db[idx];
+    sections.forEach(s=>{
+      Object.keys(set[s]).forEach(p=>{
+        if(!result[s][p]){
+          result[s][p] = {};
+          config[s].forEach(i=> result[s][p][i] = 0);
+        }
+        config[s].forEach(i=>{
+          result[s][p][i] += set[s][p][i];
+        });
+      });
+    });
+  });
+
+  // 合算結果を表示
+  let html = `<h2>合算結果（${selected.length}セット）</h2>`;
+
+  sections.forEach(s=>{
+    const items = config[s];
+    html += `<div class="section-card"><h3>${s}</h3><table>`;
+    html += `<tr><th>名前</th>`;
+    items.forEach(i=> html+=`<th>${i}</th>`);
+    html += `<th>合計</th>`;
+
+    if(s==="レセプション"){
+      html += `<th>ab率</th><th>a率</th><th>dm率</th>`;
+    }
+    if(s==="サーブ"){
+      html += `<th>効果率</th><th>ミス率</th>`;
+    }
+    if(s==="アタック"){
+      html += `<th>配給率</th><th>決定率</th><th>効果率</th><th>ミス率</th>`;
+    }
+    html += `</tr>`;
+
+    // チーム合計
+    let teamTotal = 0;
+    Object.keys(result[s]).forEach(p=>{
+      items.forEach(i=> teamTotal += result[s][p][i]);
+    });
+
+    Object.keys(result[s]).forEach(p=>{
+      let total = 0;
+      let row = `<tr><td>${p}</td>`;
+
+      items.forEach(i=>{
+        total += result[s][p][i];
+        row += `<td>${result[s][p][i]}</td>`;
+      });
+
+      row += `<td>${total}</td>`;
+
+      if(s==="レセプション"){
+        const a=result[s][p]["a"]||0;
+        const b=result[s][p]["b"]||0;
+        const dm=result[s][p]["dm"]||0;
+        row += `<td>${pct(safeDiv(a+b,total))}</td>`;
+        row += `<td>${pct(safeDiv(a,total))}</td>`;
+        row += `<td>${pct(safeDiv(dm,total))}</td>`;
+      }
+
+      if(s==="サーブ"){
+        const good=(result[s][p]["◎"]||0)+(result[s][p]["○"]||0);
+        const miss=result[s][p]["✕"]||0;
+        row += `<td>${pct(safeDiv(good-miss,total))}</td>`;
+        row += `<td>${pct(safeDiv(miss,total))}</td>`;
+      }
+
+      if(s==="アタック"){
+        const good=result[s][p]["◎"]||0;
+        const miss=result[s][p]["✕"]||0;
+        const 決定率=safeDiv(good,total);
+        const ミス率=safeDiv(miss,total);
+        const 効果率=決定率-ミス率;
+        const 配給率=safeDiv(total,teamTotal);
+
+        row += `<td>${pct(配給率)}</td>`;
+        row += `<td>${pct(決定率)}</td>`;
+        row += `<td>${pct(効果率)}</td>`;
+        row += `<td>${pct(ミス率)}</td>`;
+      }
+
+      row += `</tr>`;
+      html += row;
+    });
+
+    html += `</table></div>`;
+  });
+
+  document.getElementById("mergeResult").innerHTML = html;
+}
+
+render();
 </script>
 
 </body>
