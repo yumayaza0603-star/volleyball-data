@@ -5,18 +5,33 @@
 <title>カウンター</title>
 <style>
   body { font-family: sans-serif; padding: 20px; }
-  .set { border: 2px solid #333; margin-bottom: 20px; padding: 10px; }
-  .person { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
-  button { margin: 3px; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
+  }
+
+  button { margin: 2px; }
+
+  .controls { margin-bottom: 10px; }
 </style>
 </head>
 <body>
 
 <h1>カウンター</h1>
 
-<!-- 操作ボタン -->
-<button onclick="undo()">1つ戻る</button>
-<button onclick="resetAll()">リセット</button>
+<div class="controls">
+  <button onclick="undo()">1つ戻る</button>
+  <button onclick="resetAll()">リセット</button>
+  <button onclick="fullReset()">完全リセット</button>
+</div>
 
 <h3>個人追加</h3>
 <input id="newPerson" placeholder="名前">
@@ -26,7 +41,7 @@
 
 <script>
 const items = ["a", "b", "c", "d"];
-const sets = ["セット1", "セット2", "セット3"];
+const sets = ["レセプション", "サーブ", "アタック"];
 
 let data = JSON.parse(localStorage.getItem("data")) || {};
 let history = [];
@@ -41,10 +56,10 @@ function save() {
   localStorage.setItem("data", JSON.stringify(data));
 }
 
-// 履歴保存
+// 履歴
 function saveHistory() {
   history.push(JSON.stringify(data));
-  if (history.length > 50) history.shift(); // 最大50件
+  if (history.length > 200) history.shift();
 }
 
 // 表示
@@ -53,38 +68,48 @@ function render() {
   app.innerHTML = "";
 
   sets.forEach(s => {
-    const setDiv = document.createElement("div");
-    setDiv.className = "set";
-    setDiv.innerHTML = `<h2>${s}</h2>`;
+    const div = document.createElement("div");
+
+    let html = `<h2>${s}</h2>`;
+    html += `<table>`;
+    html += `
+      <tr>
+        <th>名前</th>
+        ${items.map(i => `<th>${i}</th>`).join("")}
+        <th>合計</th>
+        <th>計算</th>
+      </tr>
+    `;
 
     Object.keys(data[s]).forEach(p => {
-      const div = document.createElement("div");
-      div.className = "person";
-
       let total = 0;
 
-      div.innerHTML += `<h3>${p}</h3>`;
+      let row = `<tr><td>${p}</td>`;
 
       items.forEach(i => {
         if (!data[s][p][i]) data[s][p][i] = 0;
         total += data[s][p][i];
 
-        div.innerHTML += `
-          ${i}: ${data[s][p][i]}
-          <button onclick="inc('${s}','${p}','${i}')">+1</button>
-          <br>
+        row += `
+          <td>
+            ${data[s][p][i]}<br>
+            <button onclick="inc('${s}','${p}','${i}')">+1</button>
+          </td>
         `;
       });
 
-      div.innerHTML += `<strong>合計: ${total}</strong>`;
-
       const result = total * 2;
-      div.innerHTML += `<br>計算結果: ${result}`;
 
-      setDiv.appendChild(div);
+      row += `<td>${total}</td>`;
+      row += `<td>${result}</td>`;
+      row += `</tr>`;
+
+      html += row;
     });
 
-    app.appendChild(setDiv);
+    html += `</table>`;
+    div.innerHTML = html;
+    app.appendChild(div);
   });
 }
 
@@ -96,17 +121,24 @@ function inc(s, p, i) {
   render();
 }
 
-// リセット
+// Undo
+function undo() {
+  if (history.length === 0) return alert("戻れない");
+
+  data = JSON.parse(history.pop());
+  save();
+  render();
+}
+
+// リセット（数値だけ）
 function resetAll() {
-  if (!confirm("本当にリセットする？")) return;
+  if (!confirm("リセットする？")) return;
 
   saveHistory();
 
   sets.forEach(s => {
     Object.keys(data[s]).forEach(p => {
-      items.forEach(i => {
-        data[s][p][i] = 0;
-      });
+      items.forEach(i => data[s][p][i] = 0);
     });
   });
 
@@ -114,11 +146,15 @@ function resetAll() {
   render();
 }
 
-// Undo
-function undo() {
-  if (history.length === 0) return alert("戻れる操作がない");
+// 完全リセット
+function fullReset() {
+  if (!confirm("完全削除する？")) return;
 
-  data = JSON.parse(history.pop());
+  data = {};
+  history = [];
+  localStorage.removeItem("data");
+
+  sets.forEach(s => data[s] = {});
   save();
   render();
 }
@@ -140,7 +176,6 @@ function addPerson() {
   render();
 }
 
-// 初期表示
 render();
 </script>
 
